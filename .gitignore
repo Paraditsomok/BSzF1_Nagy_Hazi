@@ -1,0 +1,37 @@
+# ===== Build output =====
+build/
+Debug/
+Release/
+GNU ARM*/
+out/
+
+# ===== Object & binary files =====
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+
+# ===== Simplicity Studio / Eclipse =====
+.metadata/
+.settings/
+.project
+.cproject
+.launch
+*.launch
+
+# ===== Generated SDK files =====
+autogen/
+config/
+*.bak
+
+# ===== OS / editor junk =====
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# ===== Logs =====
+*.log
