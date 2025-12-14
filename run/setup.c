@@ -121,9 +121,18 @@ int main(int argc, char *argv[]) {
     tcgetattr(STDIN_FILENO, &old_kb); // save
 
 
+
+    /* non-blocking */
+    int kflags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, kflags | O_NONBLOCK); //Adding non blocking settings
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK); //Adding non blocking settings
+
+
     printf("Welcome to duckhunt! \nPress s to start\nPress h for controls\nPress e to exit\n");
 
-    int diff=1;
+    int diff=0;
 
     
     struct pollfd controls[2];
@@ -174,14 +183,14 @@ int main(int argc, char *argv[]) {
                     }
                 }
                 kb.c_lflag |= ICANON | ECHO;
-
+                int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+                flags &= ~O_NONBLOCK;
+                fcntl(STDIN_FILENO, F_SETFL, flags);
                 tcsetattr(STDIN_FILENO, TCSANOW, &kb);
                 char playername[10];
                 printf("Enter your name (3 letters): ");
                 scanf("%s", playername);
-                printf("%s", playername);
                 tcsetattr(STDIN_FILENO, TCSANOW, &old_kb);
-
                 FILE *f = fopen("leaderboard.txt", "a");
                 if(f) {
                     fprintf(f, "%d\t%d\t%s\n", score, diff, playername);
