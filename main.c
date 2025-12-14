@@ -37,7 +37,7 @@ int main(void) {
     static uint32_t lastTick = 0;
     GameState gamestate = GAME_MENU;
 
-    //printf("Welcome to duck hunt! To hunt ducks, press 's'. To change difficulty press '+' or '-'\r\n");
+    printf("Welcome to duck hunt! To hunt ducks, press 's'. To change difficulty press '+' or '-'\r\n");
 
     while (1) {
         uint32_t now = msTicks;
