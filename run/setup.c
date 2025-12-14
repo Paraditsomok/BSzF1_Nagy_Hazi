@@ -7,6 +7,10 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <fcntl.h>
+#include <errno.h>
+
+#include <sys/poll.h>   
+#include <signal.h>     
 
 #define TERMINAL_STR 64
 
@@ -26,8 +30,12 @@ char *const token[] = {
 };
 
 void print_info() {
-    printf("Commands for duckhunt go here!\n");
+    printf("Settings for the app!\n");
+    printf("Use -h or -? to ask for the help menu\n");
+    printf("Use -s to give your device settings, in the format dev=/dev/tty*,baudrate=*. Currently my program uses 115200. There could be a global case if it was initiated in some other way.\n");
 }
+
+
 
 int main(int argc, char *argv[]) {
 
@@ -35,11 +43,6 @@ int main(int argc, char *argv[]) {
     char *subopts;
     char *value;
     int errfnd = 0;
-
-    printf("Given arguments? %d\n", argc);
-    for(int i=0;i<argc;i++){
-        printf("%d: %s \n", i, argv[i]);
-    }
 
     while((opt = getopt(argc,argv, "h?s:")) != -1){
         switch(opt){
@@ -91,33 +94,114 @@ int main(int argc, char *argv[]) {
     struct termios seropts;
     tcgetattr(fd, &seropts);
 
-    seropts.c_cflag = CS8 | CREAD | CLOCAL;
+    cfmakeraw(&seropts);
+
+    seropts.c_cflag |= (CS8 | CREAD | CLOCAL);
     seropts.c_cc[VMIN] = 1;
-    seropts.c_cc[VTIME] = 5;
+    seropts.c_cc[VTIME] = 0;
     cfsetospeed(&seropts, DUCKHUNT_BAUDRATE);
     cfsetispeed(&seropts, DUCKHUNT_BAUDRATE);
 
     tcsetattr(fd, TCSANOW, &seropts);
 
-    struct termios canon; //STDIN handles input, and it requires end of line in basic settings. We have to turn that off
-    tcgetattr(STDIN_FILENO,&canon);
+    //I'm not sure about this one
+    struct termios kb;
+    tcgetattr(STDIN_FILENO, &kb);
 
-    canon.c_lflag &= ~(ICANON | ECHO);  // no end of line buffering, echo had to be disabled to not use getche()
-    canon.c_cc[VMIN]  = 1;
-    canon.c_cc[VTIME] = 0;
+    /* cbreak-style input */
+    kb.c_lflag &= ~(ICANON | ECHO); // Disable enter from lines
+    kb.c_lflag |= ISIG; //keeps the option for special keys
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &canon);
+    kb.c_cc[VMIN]  = 1;
+    kb.c_cc[VTIME] = 0;
 
-    int c;
-    while(1){
-        c = getchar();
-        if(c != EOF){
-            write(fd, &c, 1);
-            printf("%d sent", c);
-            c = EOF;
+    tcsetattr(STDIN_FILENO, TCSANOW, &kb);
+
+    struct termios old_kb;
+    tcgetattr(STDIN_FILENO, &old_kb); // save
+
+
+    printf("Welcome to duckhunt! \nPress s to start\nPress h for controls\nPress e to exit\n");
+
+    int diff=1;
+
+    
+    struct pollfd controls[2];
+    controls[0].fd = STDIN_FILENO;
+    controls[0].events = POLLIN;
+    controls[1].fd = fd;
+    controls[1].events = POLLIN;
+    int running = 1;
+    int gamerunning = 0;
+    char c;
+    char r[4];
+    int score = 0;
+    while(running){
+        int success = poll(controls, 2, 100); //sleep for 100ms
+        if(success < 0){
+            perror("poll");
+            break;
         }
-        
+        if(controls[0].revents & POLLIN){
+            read(STDIN_FILENO, &c, 1);
+            switch (c) {
+                case 'e':
+                    running = 0;
+                    break;
+                case 's':
+                    if (!gamerunning) gamerunning = 1;
+                    break;
+                case 'h':
+                    if (!gamerunning) {
+                        printf("to move the hunter left use b, to move it right press j\n"
+                            "To shoot the ducks that randomly appear on the other side press a\n"
+                            "To change the difficulty, press either '+' or '-'\n"
+                            "At the end of the game, you can input your name and store your data\n");
+                    }
+                    break;
+                default:
+                    break;
+            }
+            write(fd, &c, 1);
+        }
+        if (controls[1].revents & POLLIN) {
+            char buf[4];
+            read(fd, buf, 4);
+            if(buf[0]=='A' && gamerunning){ //Game over
+                for(int i=0;i<3;i++){
+                    if (buf[i] >= '0' && buf[i] <= '9'){
+                        score = score * 10 + (buf[i] - '0');
+                    }
+                }
+                kb.c_lflag |= ICANON | ECHO;
+
+                tcsetattr(STDIN_FILENO, TCSANOW, &kb);
+                char playername[10];
+                printf("Enter your name (3 letters): ");
+                scanf("%s", playername);
+                printf("%s", playername);
+                tcsetattr(STDIN_FILENO, TCSANOW, &old_kb);
+
+                FILE *f = fopen("leaderboard.txt", "a");
+                if(f) {
+                    fprintf(f, "%d\t%d\t%s\n", score, diff, playername);
+                    fclose(f);
+                } else {
+                    perror("fopen");
+                }
+                gamerunning = 0;
+                score = 0;
+            }
+            else if(buf[0]=='B'){
+                read(fd, &r, 1);
+                diff=(int)buf[1]-'0';
+                printf("Difficulty set to %d\n", diff);
+            }
+                
+            }
     }
+    
+    
     close(fd);
 
     exit(EXIT_SUCCESS);
